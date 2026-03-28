@@ -6,7 +6,7 @@ on:
     branches: ["main"]
     types: [checks_requested]
   push:
-    branches: ["main"]
+    branches: ["mainlw"]
 permissions:
   contents: read
 
