@@ -1,0 +1,291 @@
+name: Manual Test Win10 Version
+
+# 手动触发测试工作流
+on:
+  workflow_dispatch:
+    inputs:
+      test-type:
+        description: '测试类型'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - api-only
+          - web-only
+      test-environment:
+        description: '测试环境'
+        required: false
+        default: 'development'
+        type: string
+
+concurrency:
+  group: manual-test-win10-${{ github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  checks: write
+  contents: read
+  packages: write
+  actions: read
+
+jobs:
+  # API 测试作业
+  api-test:
+    name: API Tests on Win10
+    # 仅在 Windows 10 上运行
+    runs-on: windows-latest
+    # 仅当测试类型为 full 或 api-only 时运行
+    if: ${{ github.event.inputs.test-type == 'full' || github.event.inputs.test-type == 'api-only' }}
+    
+    defaults:
+      run:
+        working-directory: ./api
+
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # 设置 UV 和 Python
+      - name: Setup UV and Python
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: false
+          python-version: "3.12"
+          cache-dependency-glob: api/uv.lock
+
+      # 安装依赖
+      - name: Install API dependencies
+        run: uv sync --project api --dev
+        
+      # 运行 API 类型检查
+      - name: Run API Type Checks
+        run: ./dev/basedpyright-check
+        env:
+          TEST_ENVIRONMENT: ${{ github.event.inputs.test-environment }}
+
+      # 运行 API 单元测试
+      - name: Run API Unit Tests
+        run: uv run --project api --dev dev/pytest/pytest_unit_tests.sh
+        env:
+          TEST_ENVIRONMENT: ${{ github.event.inputs.test-environment }}
+
+      # 生成 API 测试报告日志
+      - name: API Test Results Log
+        if: always()
+        run: echo "API Tests completed on Win10 with status: ${{ job.status }}"
+
+  # Web 测试作业
+  web-test:
+    name: Web Tests on Win10
+    # 仅在 Windows 10 上运行
+    runs-on: windows-latest
+    # 仅当测试类型为 full 或 web-only 时运行
+    if: ${{ github.event.inputs.test-type == 'full' || github.event.inputs.test-type == 'web-only' }}
+    
+    defaults:
+      run:
+        working-directory: ./web
+
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # 设置 Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      # 安装依赖
+      - name: Install Web dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 运行 Web 类型检查
+      - name: Run Web Type Checks
+        run: pnpm type-check
+        env:
+          TEST_ENVIRONMENT: ${{ github.event.inputs.test-environment }}
+
+      # 运行 Web Lint 检查
+      - name: Run Web Lint Checks
+        run: pnpm lint
+        env:
+          TEST_ENVIRONMENT: ${{ github.event.inputs.test-environment }}
+
+      # 运行 Web 单元测试
+      - name: Run Web Unit Tests
+        run: pnpm test
+        env:
+          TEST_ENVIRONMENT: ${{ github.event.inputs.test-environment }}
+
+      # 生成 Web 测试报告日志
+      - name: Web Test Results Log
+        if: always()
+        run: echo "Web Tests completed on Win10 with status: ${{ job.status }}"
+
+  # 构建打包作业 - API
+  build-api-package:
+    name: Build API Package for Win10
+    runs-on: windows-latest
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # 设置 UV 和 Python
+      - name: Setup UV and Python
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: false
+          python-version: "3.12"
+          cache-dependency-glob: api/uv.lock
+
+      # 安装 API 依赖
+      - name: Install API dependencies
+        run: uv sync --project api --dev
+
+      # 打包 API 代码和依赖
+      - name: Package API code and dependencies
+        run: |
+          # 创建打包目录
+          mkdir -p ./api-package/api
+          mkdir -p ./api-package/dependencies
+          
+          # 复制 API 代码
+          cp -r ./api/* ./api-package/api/
+          
+          # 复制依赖
+          cp -r ./api/.venv ./api-package/dependencies/
+          
+          # 复制必要的脚本
+          cp ./dev/pytest/pytest_unit_tests.sh ./api-package/
+          cp ./dev/basedpyright-check ./api-package/
+          
+          # 创建 README 文件
+          echo "# Dify API Win10 Test Package" > ./api-package/README.md
+          echo "Manual test package for Dify API on Windows 10" >> ./api-package/README.md
+          echo "" >> ./api-package/README.md
+          echo "## Usage" >> ./api-package/README.md
+          echo "1. Extract the package" >> ./api-package/README.md
+          echo "2. Run tests using: ./pytest_unit_tests.sh" >> ./api-package/README.md
+
+      # 创建 ZIP 包
+      - name: Create API ZIP package
+        run: |
+          Compress-Archive -Path ./api-package/* -DestinationPath ./dify-api-win10-test-package-${{ github.run_id }}.zip
+
+      # 上传 API 打包产物到 GitHub
+      - name: Upload API Package to GitHub
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: dify-api-win10-test-package
+          path: ./dify-api-win10-test-package-${{ github.run_id }}.zip
+          retention-days: 30
+
+  # 构建打包作业 - Web
+  build-web-package:
+    name: Build Web Package for Win10
+    runs-on: windows-latest
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # 设置 Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      # 安装 Web 依赖
+      - name: Install Web dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ./web
+
+      # 打包 Web 代码和依赖
+      - name: Package Web code and dependencies
+        run: |
+          # 创建打包目录
+          mkdir -p ./web-package/web
+          mkdir -p ./web-package/dependencies
+          
+          # 复制 Web 代码
+          cp -r ./web/* ./web-package/web/
+          
+          # 复制依赖
+          cp -r ./web/node_modules ./web-package/dependencies/
+          
+          # 创建 README 文件
+          echo "# Dify Web Win10 Test Package" > ./web-package/README.md
+          echo "Manual test package for Dify Web on Windows 10" >> ./web-package/README.md
+          echo "" >> ./web-package/README.md
+          echo "## Usage" >> ./web-package/README.md
+          echo "1. Extract the package" >> ./web-package/README.md
+          echo "2. Run tests using: npm test" >> ./web-package/README.md
+
+      # 创建 ZIP 包
+      - name: Create Web ZIP package
+        run: |
+          Compress-Archive -Path ./web-package/* -DestinationPath ./dify-web-win10-test-package-${{ github.run_id }}.zip
+
+      # 上传 Web 打包产物到 GitHub
+      - name: Upload Web Package to GitHub
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: dify-web-win10-test-package
+          path: ./dify-web-win10-test-package-${{ github.run_id }}.zip
+          retention-days: 30
+
+  # 测试总结作业
+  test-summary:
+    name: Test Summary
+    # 仅在 Windows 10 上运行
+    runs-on: windows-latest
+    # 依赖于前面的测试作业完成
+    needs: [api-test, web-test, build-api-package, build-web-package]
+    # 即使前面的作业失败也运行
+    if: always()
+    
+    steps:
+      # 输出测试结果总结
+      - name: Output Test Summary
+        run: |
+          echo "========================================"
+          echo "Manual Test Win10 Version - Results Summary"
+          echo "========================================"
+          echo "Test Type: ${{ github.event.inputs.test-type }}"
+          echo "Test Environment: ${{ github.event.inputs.test-environment }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Run Number: ${{ github.run_number }}"
+          echo "API Tests Status: ${{ needs.api-test.result }}"
+          echo "Web Tests Status: ${{ needs.web-test.result }}"
+          echo "API Package Build: ${{ needs.build-api-package.result }}"
+          echo "Web Package Build: ${{ needs.build-web-package.result }}"
+          echo "========================================"
+          
+          # 检查是否所有测试都通过
+          if [ "${{ needs.api-test.result }}" == "success" ] && [ "${{ needs.web-test.result }}" == "success" ]; then
+            echo "✅ All tests passed!"
+            exit 0
+          elif [ "${{ needs.api-test.result }}" == "skipped" ] && [ "${{ needs.web-test.result }}" == "skipped" ]; then
+            echo "⚠️  All tests were skipped."
+            exit 0
+          else
+            echo "❌ Some tests failed!"
+            exit 1
+          fi
