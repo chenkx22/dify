@@ -1,6 +1,5 @@
 name: Manual Test Win10 Version
 
-# 手动触发测试工作流
 on:
   workflow_dispatch:
     inputs:
@@ -30,32 +29,28 @@ permissions:
   actions: read
 
 jobs:
-  # API 测试作业
   api-test:
     name: API Tests on Win10
     runs-on: windows-latest
     if: ${{ github.event.inputs.test-type == 'full' || github.event.inputs.test-type == 'api-only' }}
-    
     defaults:
       run:
         working-directory: ./api
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup UV and Python
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
           python-version: "3.12"
-          cache-dependency-glob: api/uv.lock
 
       - name: Install API dependencies
         run: uv sync --project api --dev
-        
+
       - name: Run API Type Checks
         run: uv run basedpyright
         env:
@@ -70,28 +65,24 @@ jobs:
         if: always()
         run: echo "API Tests completed on Win10 with status: ${{ job.status }}"
 
-  # Web 测试作业
   web-test:
     name: Web Tests on Win10
     runs-on: windows-latest
     if: ${{ github.event.inputs.test-type == 'full' || github.event.inputs.test-type == 'web-only' }}
-    
     defaults:
       run:
         working-directory: ./web
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
-          cache-dependency-path: web/pnpm-lock.yaml
+          node-version: 22
+          cache: pnpm
 
       - name: Install Web dependencies
         run: pnpm install --frozen-lockfile
@@ -115,115 +106,58 @@ jobs:
         if: always()
         run: echo "Web Tests completed on Win10 with status: ${{ job.status }}"
 
-  # 构建打包作业 - API
   build-api-package:
     name: Build API Package for Win10
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-
-      - name: Setup UV and Python
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
-        with:
-          enable-cache: false
-          python-version: "3.12"
-          cache-dependency-glob: api/uv.lock
-
-      - name: Install API dependencies
+        uses: actions/checkout@v4
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v7
+        with: { python-version: "3.12" }
+      - name: Install deps
         run: uv sync --project api --dev
-
-      - name: Package API code and dependencies
+      - name: Package
         run: |
-          New-Item -ItemType Directory -Force ./api-package/api, ./api-package/dependencies
+          New-Item -ItemType Directory -Force ./api-package/api,./api-package/dependencies
           Copy-Item -Recurse ./api/* ./api-package/api/
           Copy-Item -Recurse ./api/.venv ./api-package/dependencies/
-          
-          New-Item -ItemType File -Path ./api-package/README.md -Value "# Dify API Win10 Test Package`nManual test package for Dify API on Windows 10`n`n## Usage`n1. Extract the package`n2. Run tests using pytest"
-
-      - name: Create API ZIP package
-        run: Compress-Archive -Path ./api-package/* -DestinationPath ./dify-api-win10-test-package-${{ github.run_id }}.zip
-
-      - name: Upload API Package to GitHub
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+          echo "# API Package" > ./api-package/README.md
+      - name: Zip
+        run: Compress-Archive -Path ./api-package/* -DestinationPath api-package.zip
+      - name: Upload
+        uses: actions/upload-artifact@v4
         with:
-          name: dify-api-win10-test-package
-          path: ./dify-api-win10-test-package-${{ github.run_id }}.zip
-          retention-days: 30
+          name: api-package
+          path: api-package.zip
 
-  # 构建打包作业 - Web
   build-web-package:
-    name: Build Web Package for Win10
+    name: Build Web Package
     runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-          cache-dependency-path: web/pnpm-lock.yaml
-
-      - name: Install Web dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
         working-directory: ./web
-
-      - name: Package Web code and dependencies
-        run: |
-          New-Item -ItemType Directory -Force ./web-package/web, ./web-package/dependencies
-          Copy-Item -Recurse ./web/* ./web-package/web/
-          Copy-Item -Recurse ./web/node_modules ./web-package/dependencies/
-          
-          New-Item -ItemType File -Path ./web-package/README.md -Value "# Dify Web Win10 Test Package`nManual test package for Dify Web on Windows 10`n`n## Usage`n1. Extract the package`n2. Run tests using pnpm test"
-
-      - name: Create Web ZIP package
-        run: Compress-Archive -Path ./web-package/* -DestinationPath ./dify-web-win10-test-package-${{ github.run_id }}.zip
-
-      - name: Upload Web Package to GitHub
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+      - run: |
+          New-Item -ItemType Directory -Force ./web-package
+          Copy-Item -Recurse ./web/* ./web-package/
+        working-directory: ./
+      - run: Compress-Archive -Path ./web-package/* -DestinationPath web-package.zip
+      - uses: actions/upload-artifact@v4
         with:
-          name: dify-web-win10-test-package
-          path: ./dify-web-win10-test-package-${{ github.run_id }}.zip
-          retention-days: 30
+          name: web-package
+          path: web-package.zip
 
-  # 测试总结作业
   test-summary:
     name: Test Summary
     runs-on: windows-latest
     needs: [api-test, web-test, build-api-package, build-web-package]
     if: always()
-    
     steps:
-      - name: Output Test Summary
+      - name: Summary
         run: |
-          echo "========================================"
-          echo "Manual Test Win10 Version - Results Summary"
-          echo "========================================"
           echo "Test Type: ${{ github.event.inputs.test-type }}"
-          echo "Test Environment: ${{ github.event.inputs.test-environment }}"
-          echo "Run ID: ${{ github.run_id }}"
-          echo "Run Number: ${{ github.run_number }}"
-          echo "API Tests Status: ${{ needs.api-test.result }}"
-          echo "Web Tests Status: ${{ needs.web-test.result }}"
-          echo "API Package Build: ${{ needs.build-api-package.result }}"
-          echo "Web Package Build: ${{ needs.build-web-package.result }}"
-          echo "========================================"
-          
-          if ("${{ needs.api-test.result }}" -eq "success" -and "${{ needs.web-test.result }}" -eq "success") {
-            echo "✅ All tests passed!"
-            exit 0
-          }
-          elseif ("${{ needs.api-test.result }}" -eq "skipped" -and "${{ needs.web-test.result }}" -eq "skipped") {
-            echo "⚠️ All tests were skipped."
-            exit 0
-          }
-          else {
-            echo "❌ Some tests failed!"
-            exit 1
-          }
+          echo "API: ${{ needs.api-test.result }}"
+          echo "Web: ${{ needs.web-test.result }}"
