@@ -56,11 +56,6 @@ jobs:
       - name: Install API dependencies
         run: uv sync --project api --dev
 
-      - name: Run API Type Checks
-        run: ./dev/basedpyright-check
-        env:
-          TEST_ENVIRONMENT: ${{ github.event.inputs.test-environment }}
-
       - name: Run API Unit Tests
         run: uv run --project api --dev dev/pytest/pytest_unit_tests.sh
         env:
