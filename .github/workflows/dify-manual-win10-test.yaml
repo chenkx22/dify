@@ -68,7 +68,7 @@ jobs:
 
       - name: API Test Results Log
         if: always()
-        run: echo "API Tests completed on Win10 with status: ${{ job.status }}"
+        run: 'echo "API Tests completed on Win10 with status: ${{ job.status }}"'
 
   # Web Test Job
   web-test:
@@ -113,7 +113,7 @@ jobs:
 
       - name: Web Test Results Log
         if: always()
-        run: echo "Web Tests completed on Win10 with status: ${{ job.status }}"
+        run: 'echo "Web Tests completed on Win10 with status: ${{ job.status }}"'
 
   # Build Package Job - API
   build-api-package:
