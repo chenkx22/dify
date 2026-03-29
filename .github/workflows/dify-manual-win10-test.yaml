@@ -36,10 +36,6 @@ jobs:
     runs-on: windows-latest
     if: ${{ github.event.inputs.test-type == 'full' || github.event.inputs.test-type == 'api-only' }}
 
-    defaults:
-      run:
-        working-directory: ./api
-
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -57,7 +53,8 @@ jobs:
         run: uv sync --project api --dev
 
       - name: Run API Unit Tests
-        run: uv run --project api --dev dev/pytest/pytest_unit_tests.sh
+        shell: pwsh
+        run: ./dev/pytest/pytest_unit_tests.ps1
         env:
           TEST_ENVIRONMENT: ${{ github.event.inputs.test-environment }}
 
@@ -148,8 +145,8 @@ jobs:
           cp -r ./api/.venv ./api-package/dependencies/
 
           # Copy necessary scripts
-          cp ./dev/pytest/pytest_unit_tests.sh ./api-package/
-          cp ./dev/basedpyright-check ./api-package/
+          cp ./dev/pytest/pytest_unit_tests.ps1 ./api-package/
+          cp ./dev/basedpyright-check.ps1 ./api-package/
 
           # Create README file
           echo "# Dify API Win10 Test Package" > ./api-package/README.md
@@ -157,7 +154,7 @@ jobs:
           echo "" >> ./api-package/README.md
           echo "## Usage" >> ./api-package/README.md
           echo "1. Extract the package" >> ./api-package/README.md
-          echo "2. Run tests using: ./pytest_unit_tests.sh" >> ./api-package/README.md
+          echo "2. Run tests using: ./pytest_unit_tests.ps1" >> ./api-package/README.md
 
       - name: Create API ZIP package
         run: |
